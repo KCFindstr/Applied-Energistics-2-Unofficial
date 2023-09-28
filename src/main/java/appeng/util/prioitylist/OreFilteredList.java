@@ -50,12 +50,12 @@ public class OreFilteredList implements IPartitionList<IAEItemStack> {
 
     private static Predicate<ItemStack> makeMatcher(String f) {
         Predicate<ItemStack> matcher = null;
-        if (notAWildcard(f)) {
-            final Predicate<String> test = Pattern.compile(f).asPredicate();
-            matcher = (is) -> is != null
-                    && IntStream.of(OreDictionary.getOreIDs(is)).mapToObj(OreDictionary::getOreName).anyMatch(test);
-        } else if (!f.isEmpty()) {
-            String[] filters = f.split("[&|]");
+        boolean isRegex = notAWildcard(f);
+        String orSymbol = isRegex ? "或" : "|";
+        String andSymbol = isRegex ? "且" : "&";
+        String split = "[" + orSymbol + andSymbol + "]";
+        if (!f.isEmpty()) {
+            String[] filters = f.split(split);
             String lastFilter = null;
 
             for (String filter : filters) {
@@ -64,7 +64,9 @@ public class OreFilteredList implements IPartitionList<IAEItemStack> {
                 boolean negated = filter.startsWith("!");
                 if (negated) filter = filter.substring(1);
 
-                Predicate<ItemStack> test = filterToItemStackPredicate(filter);
+                Predicate<ItemStack> test = isRegex
+                    ? filterRegexToItemStackPredicate(filter)
+                    : filterToItemStackPredicate(filter);
 
                 if (negated) test = test.negate();
 
@@ -76,7 +78,7 @@ public class OreFilteredList implements IPartitionList<IAEItemStack> {
                     int startThis = f.indexOf(filter);
                     lastFilter = filter;
                     if (startThis <= endLast) continue;
-                    boolean or = f.substring(endLast, startThis).contains("|");
+                    boolean or = f.substring(endLast, startThis).contains(orSymbol);
                     matcher = or ? matcher.or(test) : matcher.and(test);
                 }
             }
@@ -142,6 +144,12 @@ public class OreFilteredList implements IPartitionList<IAEItemStack> {
 
     private static Predicate<ItemStack> filterToItemStackPredicate(String filter) {
         final Predicate<String> test = filterToPredicate(filter);
+        return (is) -> is != null
+                && IntStream.of(OreDictionary.getOreIDs(is)).mapToObj(OreDictionary::getOreName).anyMatch(test);
+    }
+
+    private static Predicate<ItemStack> filterRegexToItemStackPredicate(String filter) {
+        final Predicate<String> test = Pattern.compile(filter).asPredicate();
         return (is) -> is != null
                 && IntStream.of(OreDictionary.getOreIDs(is)).mapToObj(OreDictionary::getOreName).anyMatch(test);
     }
